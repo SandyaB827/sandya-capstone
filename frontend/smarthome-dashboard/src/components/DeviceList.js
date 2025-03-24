@@ -1,17 +1,69 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import api from '../utils/api';
+import { signalRConnection } from '../utils/signalRConnection';
 
 const DeviceList = ({ devices, loading, error, refreshDevices }) => {
+  useEffect(() => {
+    // Listen for device status updates
+    signalRConnection.addListener('DeviceStatusUpdated', (update) => {
+      console.log('Device status update received:', update);
+      refreshDevices();
+    });
+
+    return () => {
+      signalRConnection.removeListener('DeviceStatusUpdated');
+    };
+  }, [refreshDevices]);
+
+  const handleToggleDevice = async (deviceId, currentStatus) => {
+    try {
+      // Get current devices state
+      const currentDevices = devices;
+      
+      // Update the device status locally
+      const updatedDevices = currentDevices.map(device => {
+        if (device.id === deviceId) {
+          return { ...device, isOnline: !currentStatus };
+        }
+        return device;
+      });
+
+      // Store the updated state in localStorage
+      localStorage.setItem('deviceStates', JSON.stringify(
+        updatedDevices.reduce((acc, device) => {
+          acc[device.id] = device.isOnline;
+          return acc;
+        }, {})
+      ));
+      
+      // Update UI through the parent's refresh function with merged state
+      const deviceStates = JSON.parse(localStorage.getItem('deviceStates') || '{}');
+      const updatedDevicesWithState = currentDevices.map(device => ({
+        ...device,
+        isOnline: deviceStates[device.id] ?? device.isOnline
+      }));
+      
+      // Update the devices state in the parent component
+      refreshDevices(updatedDevicesWithState);
+      
+      toast.success(`Device ${currentStatus ? 'turned off' : 'turned on'} successfully`);
+    } catch (err) {
+      console.error('Toggle device error:', err);
+      toast.error('Failed to toggle device');
+    }
+  };
+
   const handleDeleteDevice = async (deviceId) => {
     if (window.confirm('Are you sure you want to delete this device?')) {
       try {
         await api.delete(`/api/Devices/${deviceId}`);
-        alert('Device deleted successfully');
+        toast.success('Device deleted successfully');
         refreshDevices();
       } catch (err) {
         console.error('Delete device error:', err);
-        alert('Failed to delete device');
+        toast.error('Failed to delete device');
       }
     }
   };
@@ -61,12 +113,18 @@ const DeviceList = ({ devices, loading, error, refreshDevices }) => {
                     <td>{device.location}</td>
                     <td>{getStatusBadge(device.isOnline)}</td>
                     <td>
-                      <div className="btn-group btn-group-sm">
-                        <Link to={`/devices/${device.id}`} className="btn btn-outline-primary">
-                          Details
+                      <div className="btn-group">
+                        <Link to={`/devices/${device.id}`} className="btn btn-sm btn-info me-1">
+                          View
                         </Link>
-                        <button 
-                          className="btn btn-outline-danger"
+                        <button
+                          className="btn btn-sm btn-primary me-1"
+                          onClick={() => handleToggleDevice(device.id, device.isOnline)}
+                        >
+                          {device.isOnline ? 'Turn Off' : 'Turn On'}
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
                           onClick={() => handleDeleteDevice(device.id)}
                         >
                           Delete

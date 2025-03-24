@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate, Link } from 'react-router-dom';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import api from './utils/api';
 import Login from './components/Login';
@@ -92,8 +94,19 @@ function App() {
     setLoading(true);
     setError(null);
     try {
+      // Fetch devices from API
       const response = await api.get('/api/Devices');
-      setDevices(response.data);
+      
+      // Get stored device states from localStorage
+      const deviceStates = JSON.parse(localStorage.getItem('deviceStates') || '{}');
+      
+      // Merge API data with stored states
+      const devicesWithStoredStates = response.data.map(device => ({
+        ...device,
+        isOnline: deviceStates[device.id] ?? device.isOnline // Use stored state if available, otherwise use API state
+      }));
+      
+      setDevices(devicesWithStoredStates);
     } catch (err) {
       console.error('Fetch devices error:', err.response || err);
       setError('Failed to fetch devices: ' + (err.response?.statusText || err.message));
@@ -136,17 +149,75 @@ function App() {
     return children;
   };
 
+  const showNotification = (message, type = 'info') => {
+    const toastOptions = {
+      position: "top-right",
+      autoClose: 5000,
+      hideProgressBar: false,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+      progress: undefined,
+      theme: "colored"
+    };
+
+    switch (type) {
+      case 'error':
+        toast.error(message, toastOptions);
+        break;
+      case 'warning':
+        toast.warning(message, toastOptions);
+        break;
+      case 'success':
+        toast.success(message, toastOptions);
+        break;
+      default:
+        toast.info(message, toastOptions);
+    }
+  };
+
   const simulateSensorData = async () => {
     try {
-      await api.post('/api/Sensors/simulate');
+      // Get current devices
+      const currentDevices = JSON.parse(localStorage.getItem('devices')) || [];
+      
+      // Generate random sensor data for each device
+      const newSensorData = currentDevices.map(device => ({
+        deviceId: device.id,
+        type: device.type,
+        value: Math.random() * 100,
+        timestamp: new Date().toISOString(),
+        unit: device.type === 'Thermostat' ? '°C' : device.type === 'Light' ? 'lm' : 'units'
+      }));
+
+      // Update sensor data in state
+      setSensorData(prevData => [...newSensorData, ...prevData]);
+      
+      // Save to localStorage
+      localStorage.setItem('sensorData', JSON.stringify(newSensorData));
+      
+      showNotification('Sensor data simulation triggered successfully', 'success');
     } catch (err) {
       console.error('Simulate sensor data error:', err);
+      showNotification('Failed to simulate sensor data', 'error');
     }
   };
 
   return (
     <Router>
       <div className="container-fluid">
+        <ToastContainer
+          position="top-right"
+          autoClose={5000}
+          hideProgressBar={false}
+          newestOnTop
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme="colored"
+        />
         <nav className="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
           <div className="container">
             <Link className="navbar-brand" to="/">Smart Home Dashboard</Link>

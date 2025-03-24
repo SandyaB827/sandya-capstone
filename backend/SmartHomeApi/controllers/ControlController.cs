@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using SmartHomeApi.Data;
 using SmartHomeApi.Models;
 using System.Security.Claims;
+using Microsoft.AspNetCore.SignalR;
+using SmartHomeApi.Hubs;
 
 namespace SmartHomeApi.Controllers
 {
@@ -13,10 +15,12 @@ namespace SmartHomeApi.Controllers
     public class ControlController : ControllerBase
     {
         private readonly SmartHomeDbContext _context;
+        private readonly IHubContext<SmartHomeHub> _hubContext;
 
-        public ControlController(SmartHomeDbContext context)
+        public ControlController(SmartHomeDbContext context, IHubContext<SmartHomeHub> hubContext)
         {
             _context = context;
+            _hubContext = hubContext;
         }
 
         // POST: api/Control/light/{id}
@@ -91,6 +95,32 @@ namespace SmartHomeApi.Controllers
             Console.WriteLine($"Door command sent to {device.Name}: {command.Command}");
             
             return Ok(new { message = $"Door {device.Name} {command.Command}ed successfully" });
+        }
+
+        // POST: api/Control/toggle/{id}
+        [HttpPost("toggle/{id}")]
+        public async Task<IActionResult> ToggleDevice(int id)
+        {
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            
+            var device = await _context.Devices
+                .Where(d => d.Id == id && d.UserId == userId)
+                .FirstOrDefaultAsync();
+                
+            if (device == null)
+            {
+                return NotFound("Device not found");
+            }
+
+            // Toggle the device's power state
+            device.IsOnline = !device.IsOnline;
+            await _context.SaveChangesAsync();
+
+            // Notify connected clients about the status change
+            await _hubContext.Clients.User(userId.ToString())
+                .SendAsync("DeviceStatusUpdated", new { deviceId = device.Id, status = device.IsOnline });
+            
+            return Ok(new { status = device.IsOnline });
         }
     }
 

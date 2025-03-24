@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SmartHomeApi.Data;
 using SmartHomeApi.Hubs;
+using SmartHomeApi.Services;
 using System.Text;
 using Microsoft.OpenApi.Models;
 
@@ -56,6 +57,9 @@ builder.Services.AddCors(options =>
                .AllowCredentials(); // Required for SignalR
     });
 });
+
+// Add Sensor Simulation Service
+builder.Services.AddHostedService<SensorSimulationService>();
 
 builder.Services.AddControllers();
 

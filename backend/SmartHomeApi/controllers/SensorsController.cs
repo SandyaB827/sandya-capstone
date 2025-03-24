@@ -23,45 +23,132 @@ namespace SmartHomeApi.Controllers
             _hubContext = hubContext;
         }
 
-        // GET: api/Sensors/temperature
-        [HttpGet("{type}")]
-        public async Task<ActionResult<IEnumerable<SensorData>>> GetSensorData(string type)
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<object>>> GetAllSensorData()
         {
-            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            
-            var data = await _context.SensorData
+            var sensorData = await _context.SensorData
                 .Include(s => s.Device)
-                .Where(s => s.Type.ToLower() == type.ToLower() && s.Device.UserId == userId)
                 .OrderByDescending(s => s.Timestamp)
-                .Take(20) // Get most recent readings
+                .Take(100)
+                .Select(s => new
+                {
+                    id = s.Id,
+                    deviceId = s.DeviceId,
+                    type = s.Type,
+                    value = s.Value,
+                    unit = s.Unit,
+                    isAlert = s.IsAlert,
+                    alertMessage = s.AlertMessage,
+                    timestamp = s.Timestamp.ToString("o"), // ISO 8601 format
+                    deviceName = s.Device.Name
+                })
                 .ToListAsync();
 
-            return data;
+            return Ok(sensorData);
         }
 
-        // GET: api/Sensors/device/5
-        [HttpGet("device/{deviceId}")]
-        public async Task<ActionResult<IEnumerable<SensorData>>> GetDeviceSensorData(int deviceId)
+        [HttpGet("{deviceId}")]
+        public async Task<ActionResult<IEnumerable<object>>> GetDeviceSensorData(int deviceId)
         {
-            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            
-            // First verify the device belongs to the user
-            var device = await _context.Devices
-                .Where(d => d.Id == deviceId && d.UserId == userId)
-                .FirstOrDefaultAsync();
-                
+            var device = await _context.Devices.FindAsync(deviceId);
             if (device == null)
             {
                 return NotFound("Device not found");
             }
-            
-            var data = await _context.SensorData
+
+            var sensorData = await _context.SensorData
                 .Where(s => s.DeviceId == deviceId)
                 .OrderByDescending(s => s.Timestamp)
                 .Take(50)
+                .Select(s => new
+                {
+                    id = s.Id,
+                    deviceId = s.DeviceId,
+                    type = s.Type,
+                    value = s.Value,
+                    unit = s.Unit,
+                    isAlert = s.IsAlert,
+                    alertMessage = s.AlertMessage,
+                    timestamp = s.Timestamp.ToString("o") // ISO 8601 format
+                })
                 .ToListAsync();
 
-            return data;
+            return Ok(sensorData);
+        }
+
+        [HttpGet("latest/{deviceId}")]
+        public async Task<ActionResult<object>> GetLatestSensorData(int deviceId)
+        {
+            var device = await _context.Devices.FindAsync(deviceId);
+            if (device == null)
+            {
+                return NotFound("Device not found");
+            }
+
+            var latestReading = await _context.SensorData
+                .Where(s => s.DeviceId == deviceId)
+                .OrderByDescending(s => s.Timestamp)
+                .Select(s => new
+                {
+                    id = s.Id,
+                    deviceId = s.DeviceId,
+                    type = s.Type,
+                    value = s.Value,
+                    unit = s.Unit,
+                    isAlert = s.IsAlert,
+                    alertMessage = s.AlertMessage,
+                    timestamp = s.Timestamp.ToString("o") // ISO 8601 format
+                })
+                .FirstOrDefaultAsync();
+
+            if (latestReading == null)
+            {
+                return NotFound("No sensor data available for this device");
+            }
+
+            return Ok(latestReading);
+        }
+
+        [HttpGet("history/{deviceId}")]
+        public async Task<ActionResult<IEnumerable<object>>> GetDeviceSensorHistory(int deviceId, 
+            [FromQuery] DateTime? startDate, 
+            [FromQuery] DateTime? endDate)
+        {
+            var device = await _context.Devices.FindAsync(deviceId);
+            if (device == null)
+            {
+                return NotFound("Device not found");
+            }
+
+            var query = _context.SensorData
+                .Where(s => s.DeviceId == deviceId);
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(s => s.Timestamp >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                query = query.Where(s => s.Timestamp <= endDate.Value);
+            }
+
+            var sensorData = await query
+                .OrderByDescending(s => s.Timestamp)
+                .Select(s => new
+                {
+                    id = s.Id,
+                    deviceId = s.DeviceId,
+                    type = s.Type,
+                    value = s.Value,
+                    unit = s.Unit,
+                    isAlert = s.IsAlert,
+                    alertMessage = s.AlertMessage,
+                    timestamp = s.Timestamp.ToString("o") // ISO 8601 format
+                })
+                .ToListAsync();
+
+            return Ok(sensorData);
         }
 
         // GET: api/Sensors/alerts

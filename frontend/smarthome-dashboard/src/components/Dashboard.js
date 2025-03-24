@@ -130,7 +130,15 @@ const Dashboard = ({ devices, sensorData, alerts, loading, error }) => {
                           <td>{device.name || `Device ${reading.deviceId}`}</td>
                           <td>{reading.type}</td>
                           <td>{reading.value} {reading.unit}</td>
-                          <td>{new Date(reading.timestamp).toLocaleTimeString()}</td>
+                          <td>{reading.timestamp ? new Date(reading.timestamp).toLocaleString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: true
+                          }) : 'N/A'}</td>
                         </tr>
                       );
                     })}

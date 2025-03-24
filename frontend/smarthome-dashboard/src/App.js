@@ -22,11 +22,27 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   const [hubConnection, setHubConnection] = useState(null);
 
+  const fetchSensorData = async () => {
+    try {
+      const response = await api.get('/api/sensors');
+      if (response.data) {
+        setSensorData(response.data);
+      }
+    } catch (err) {
+      console.error('Fetch sensor data error:', err);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        setIsAuthenticated(false);
+      }
+    }
+  };
+
   // Set up SignalR connection when authentication state changes
   useEffect(() => {
     if (isAuthenticated) {
       fetchDevices();
       fetchAlerts();
+      fetchSensorData();
       connectToSignalR();
     } else {
       // Disconnect SignalR when logged out
@@ -58,11 +74,33 @@ function App() {
       connection.on("SensorDataUpdated", (data) => {
         console.log("Real-time sensor update received:", data);
         setSensorData(prevData => {
+          // Extract the sensor data from the nested structure
+          const sensorReading = data.sensorData || data;
+          
+          // Ensure the reading has all required fields
+          if (!sensorReading || !sensorReading.type || !sensorReading.timestamp) {
+            console.warn('Received invalid sensor reading:', sensorReading);
+            return prevData;
+          }
+
           // Remove any existing data for this device+type and add the new one
           const filtered = prevData.filter(d => 
-            !(d.deviceId === data.deviceId && d.type === data.type)
+            !(d.deviceId === sensorReading.deviceId && d.type === sensorReading.type)
           );
-          return [data, ...filtered];
+
+          // Add the new reading with proper structure
+          const newReading = {
+            id: sensorReading.id,
+            deviceId: sensorReading.deviceId,
+            type: sensorReading.type,
+            value: sensorReading.value || '0',
+            unit: sensorReading.unit || '',
+            isAlert: sensorReading.isAlert || false,
+            alertMessage: sensorReading.alertMessage,
+            timestamp: sensorReading.timestamp
+          };
+
+          return [newReading, ...filtered];
         });
       });
       
@@ -178,23 +216,19 @@ function App() {
 
   const simulateSensorData = async () => {
     try {
-      // Get current devices
-      const currentDevices = JSON.parse(localStorage.getItem('devices')) || [];
+      // Call the backend API to simulate sensor data
+      const response = await api.post('/api/sensors/simulate');
       
-      // Generate random sensor data for each device
-      const newSensorData = currentDevices.map(device => ({
-        deviceId: device.id,
-        type: device.type,
-        value: Math.random() * 100,
-        timestamp: new Date().toISOString(),
-        unit: device.type === 'Thermostat' ? '°C' : device.type === 'Light' ? 'lm' : 'units'
-      }));
-
-      // Update sensor data in state
-      setSensorData(prevData => [...newSensorData, ...prevData]);
-      
-      // Save to localStorage
-      localStorage.setItem('sensorData', JSON.stringify(newSensorData));
+      // Update sensor data in state with the response data
+      if (response.data && response.data.data) {
+        setSensorData(prevData => {
+          const newData = response.data.data.map(reading => ({
+            ...reading,
+            timestamp: reading.timestamp // Backend sends ISO 8601 format
+          }));
+          return [...newData, ...prevData];
+        });
+      }
       
       showNotification('Sensor data simulation triggered successfully', 'success');
     } catch (err) {

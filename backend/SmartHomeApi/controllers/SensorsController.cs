@@ -187,7 +187,22 @@ namespace SmartHomeApi.Controllers
             await _context.SaveChangesAsync();
             
             // Send real-time update via SignalR
-            await _hubContext.Clients.User(userId.ToString()).SendAsync("SensorDataUpdated", sensorData);
+            await _hubContext.Clients.User(userId.ToString()).SendAsync("SensorDataUpdated", new
+            {
+                deviceId = device.Id,
+                deviceName = device.Name,
+                sensorData = new
+                {
+                    id = sensorData.Id,
+                    deviceId = sensorData.DeviceId,
+                    type = sensorData.Type,
+                    value = sensorData.Value,
+                    unit = sensorData.Unit,
+                    isAlert = sensorData.IsAlert,
+                    alertMessage = sensorData.AlertMessage,
+                    timestamp = sensorData.Timestamp.ToString("o") // ISO 8601 format
+                }
+            });
             
             // If it's an alert, send a separate notification
             if (sensorData.IsAlert)
@@ -199,7 +214,7 @@ namespace SmartHomeApi.Controllers
                     type = sensorData.Type,
                     value = sensorData.Value,
                     message = sensorData.AlertMessage,
-                    timestamp = sensorData.Timestamp
+                    timestamp = sensorData.Timestamp.ToString("o")
                 };
                 
                 await _hubContext.Clients.User(userId.ToString()).SendAsync("AlertNotification", alertMessage);
@@ -356,7 +371,22 @@ namespace SmartHomeApi.Controllers
                 // Send real-time updates
                 foreach (var data in simulatedData)
                 {
-                    await _hubContext.Clients.User(userId.ToString()).SendAsync("SensorDataUpdated", data);
+                    await _hubContext.Clients.User(userId.ToString()).SendAsync("SensorDataUpdated", new
+                    {
+                        deviceId = data.DeviceId,
+                        deviceName = devices.First(d => d.Id == data.DeviceId).Name,
+                        sensorData = new
+                        {
+                            id = data.Id,
+                            deviceId = data.DeviceId,
+                            type = data.Type,
+                            value = data.Value,
+                            unit = data.Unit,
+                            isAlert = data.IsAlert,
+                            alertMessage = data.AlertMessage,
+                            timestamp = data.Timestamp.ToString("o") // ISO 8601 format
+                        }
+                    });
                     
                     if (data.IsAlert)
                     {
@@ -368,7 +398,7 @@ namespace SmartHomeApi.Controllers
                             type = data.Type,
                             value = data.Value,
                             message = data.AlertMessage,
-                            timestamp = data.Timestamp
+                            timestamp = data.Timestamp.ToString("o")
                         };
                         
                         await _hubContext.Clients.User(userId.ToString()).SendAsync("AlertNotification", alertMessage);

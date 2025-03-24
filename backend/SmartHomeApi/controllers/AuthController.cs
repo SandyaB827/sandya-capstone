@@ -43,6 +43,10 @@ namespace SmartHomeApi.Controllers
             Console.WriteLine($"Original password: {originalPassword.Substring(0, 3)}*** (truncated)");
             Console.WriteLine($"Hashed password: {user.PasswordHash}");
             
+            // Initialize user properties
+            user.CreatedAt = DateTime.Now;
+            user.Devices = new List<Device>();
+            
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
             return Ok("User registered successfully.");

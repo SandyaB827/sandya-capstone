@@ -4,6 +4,11 @@ namespace SmartHomeApi.Models
 {
     public class User
     {
+        public User()
+        {
+            Devices = new List<Device>();
+        }
+
         public int Id { get; set; }
 
         [Required]
@@ -21,6 +26,6 @@ namespace SmartHomeApi.Models
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         
         // Navigation property for devices owned by this user
-        public ICollection<Device> Devices { get; set; }
+        public virtual ICollection<Device> Devices { get; set; }
     }
 }
